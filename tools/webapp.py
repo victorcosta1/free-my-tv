@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.join(ROOT, 'tools'))
 import translate  # noqa: E402  (the catalogues and the keys the web app uses)
 
 GENERIC = {'tmdbKey': '', 'tmdbRegion': '', 'latitude': '', 'longitude': '', 'city': '', 'language': 'auto',
-           'currency': '', 'temperature': 'auto', 'showCrypto': True, 'hideAnimation': False, 'hideApps': []}
+           'currency': '', 'temperature': 'auto', 'showCrypto': True, 'hideAnimation': False, 'hideApps': [], 'look': 'classic'}
 
 
 def config_from_args(args):
@@ -58,7 +58,16 @@ def read_config(path):
         'showCrypto': values.get('show_crypto', 'true').lower() != 'false',
         'hideAnimation': values.get('hide_animation', 'false').lower() == 'true',
         'hideApps': [s.strip() for s in values.get('hide_apps', '').split(',') if s.strip()],
+        'look': look(values.get('look', 'classic')),
     }
+
+
+def look(value):
+    """LG and Samsung: the look of the home screen (spec/liquid-glass.md): classic, glass, or auto."""
+    v = (value or 'classic').lower()
+    if v not in ('classic', 'glass', 'auto'):
+        sys.exit('config.properties: look must be classic, glass or auto (got "%s")' % value)
+    return v
 
 
 def coins():

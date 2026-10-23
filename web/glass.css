@@ -1,0 +1,124 @@
+/*
+ * The glass look (spec/liquid-glass.md): the focused pick fills the screen, dark, with real frosted glass on the tabs,
+ * the buttons, the shelf and the drawer. Everything here hangs on body.lg (look=glass or auto in config.properties),
+ * so without it nothing changes. backdrop-filter needs a 2021 or newer TV; the blur itself never animates.
+ */
+
+#hero, #heroinfo, #now { display: none; }
+
+.lg #hero, .lg #heroinfo, .lg #now { display: block; }
+
+/* MARK: - The surfaces */
+
+.lg #tabs, .lg .round, .lg #platter, .lg .glass {
+  background: rgba(255, 255, 255, 0.10);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  backdrop-filter: blur(40px) saturate(180%);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35), inset 0 1.5px 0 rgba(255, 255, 255, 0.38), inset 0 -1px 0 rgba(255, 255, 255, 0.06), inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+
+/* MARK: - Background: the focused pick, full screen, shaded on the left and at the bottom for the text */
+
+.lg #sky { background: #07080B; }
+.lg #sky .grad, .lg #sky canvas { display: none; }
+.lg #sky .veil { background: transparent; }
+.lg #hero { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+.lg #hero .shot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position: center top;
+  opacity: 0;
+  -webkit-transition: opacity 0.6s;
+  transition: opacity 0.6s;
+}
+.lg #hero .shot.on { opacity: 1; }
+.lg #hero .fade {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(7, 8, 11, 0.88) 0%, rgba(7, 8, 11, 0.5) 40%, rgba(7, 8, 11, 0) 66%),
+    linear-gradient(180deg, rgba(7, 8, 11, 0.45) 0%, rgba(7, 8, 11, 0) 22%, rgba(7, 8, 11, 0) 50%, rgba(7, 8, 11, 0.92) 100%);
+}
+
+/* MARK: - Top: tabs in a glass pill, the clock and the round buttons at the right */
+
+.lg #title, .lg #quotes { display: none; }
+
+.lg #tabs { left: 80px; top: 56px; height: 60px; padding: 8px; border-radius: 38px; }
+.lg .tab { height: 60px; line-height: 60px; padding: 0 32px; margin-right: 0; border-radius: 30px; font-size: 26px; color: rgba(245, 245, 247, 0.72); }
+.lg .tab.on { background: rgba(255, 255, 255, 0.16); color: #F5F5F7; }
+.lg .tab.focus, .lg.night .tab.focus { background: #FFF; color: #0B0C10; box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45); }
+
+.lg #buttons { -webkit-transform: translateX(-24px); transform: translateX(-24px); }
+.lg .round { top: 56px; width: 76px; height: 76px; border-radius: 38px; color: #F5F5F7; }
+.lg .round .sym { left: 24px; top: 24px; }
+.lg .round .tip { top: 96px; color: #F5F5F7; }
+.lg .round.focus, .lg.night .round.focus { background: #FFF; color: #0B0C10; box-shadow: 0 20px 44px rgba(0, 0, 0, 0.5); }
+
+.lg #now { color: #F5F5F7; position: absolute; right: 368px; top: 62px; text-align: right; white-space: nowrap; font-feature-settings: 'tnum'; }
+.lg #now .time { display: block; font-size: 34px; font-weight: 600; letter-spacing: -0.01em; line-height: 36px; }
+.lg #now .date { display: block; margin-top: 6px; font-size: 20px; font-weight: 500; color: rgba(245, 245, 247, 0.7); }
+.lg.no-picks #now { display: none; }
+
+/* MARK: - The focused pick's name and details, over its photo */
+
+.lg #heroinfo { position: absolute; left: 80px; bottom: 490px; color: #F5F5F7; width: 1000px; text-shadow: 0 2px 24px rgba(0, 0, 0, 0.35); }
+.lg #heroinfo .name {
+  margin: 0;
+  max-height: 208px;
+  overflow: hidden;
+  font-size: 104px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+.lg #heroinfo .meta { margin-top: 22px; font-size: 26px; font-weight: 500; color: rgba(245, 245, 247, 0.8); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* MARK: - Picks: three 16:9 thumbnails, the name inside */
+
+.lg .card { top: 620px; height: 186px; }
+.lg .card .img, .lg .card .img::after { border-radius: 26px; }
+.lg .card .img { background-color: #1C1C1E; box-shadow: 0 12px 34px rgba(0, 0, 0, 0.45); }
+.lg .card .img::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 60%;
+  background: linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.7));
+}
+.lg .card .name { left: 20px; right: 20px; top: auto; bottom: 14px; font-size: 22px; letter-spacing: 0; color: #F5F5F7; }
+.lg .card.focus { -webkit-transform: translateY(-4px) scale(1.08); transform: translateY(-4px) scale(1.08); }
+.lg .card.focus .img { box-shadow: 0 30px 70px rgba(0, 0, 0, 0.6); }
+
+/* MARK: - Shelf and drawer */
+
+.lg .tile.focus { box-shadow: 0 24px 56px rgba(0, 0, 0, 0.6); }
+.lg .panel { border-radius: 44px; }
+.lg .key { border-radius: 28px; }
+.lg .key.focus, .lg.night .key.focus { background: #F5F5F7; color: #1C1C1E; }
+.lg.drawer-open #sky .lift { opacity: 0.5; }
+
+/* MARK: - Sheets */
+
+.lg .sheet {
+  background: rgba(0, 0, 0, 0.55);
+  -webkit-backdrop-filter: blur(30px);
+  backdrop-filter: blur(30px);
+}
+
+/* Less glass for people who asked for it: solid surfaces. */
+@media (prefers-reduced-transparency: reduce) {
+  .lg #tabs, .lg .round, .lg #platter, .lg .glass, .lg .sheet {
+    background: rgba(28, 28, 30, 0.92);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}

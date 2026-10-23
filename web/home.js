@@ -52,6 +52,15 @@
 
   var stage = $('stage'), body = document.body;
 
+  /** look in config.properties (spec/liquid-glass.md): glass, or auto where the TV can blur what's behind. */
+  function canBlur() {
+    try {
+      return !!(window.CSS && CSS.supports && (CSS.supports('backdrop-filter', 'blur(1px)') || CSS.supports('-webkit-backdrop-filter', 'blur(1px)')));
+    } catch (e) { return false; }
+  }
+  var GLASS = CONFIG.look === 'glass' || (CONFIG.look === 'auto' && canBlur());
+  setClass(body, 'lg', GLASS);
+
   /** The 1920 × 1080 stage fills the window (on the TV it already is 1920 × 1080). */
   function fit() {
     var s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
@@ -165,6 +174,7 @@
     focusRows($('langpick'), st.lang, st.zone === Z.LANG);
     if (langHint) langHint.textContent = (st.lang + 1) + ' / ' + languageChoices().length + '  ·  ' + tr('OK picks, Back cancels.');
     setClass(body, 'drawer-open', st.zone === Z.DRAWER);
+    hero();
   }
 
   function focusRows(sheet, index, on) {
@@ -234,24 +244,49 @@
     setClass(body, 'no-picks', !list.length);
     var same = list.length === cards.length;
     for (var i = 0; same && i < list.length; i++) same = list[i].id === cards[i].id && list[i].backdrop === cards[i].backdrop && list[i].meta === cards[i].meta;
-    if (same && holder.children.length === list.length) return;
+    if (same && holder.children.length === list.length) { hero(); return; }
     cards = list;
     holder.innerHTML = '';
-    var rects = [[80, 1040], [1160, 320], [1520, 320]];
+    var rects = GLASS ? [[80, 330], [438, 330], [796, 330]] : [[80, 1040], [1160, 320], [1520, 320]];
     for (var c = 0; c < list.length; c++) {
       var p = list[c], card = el('div', 'card', holder);
       card.style.left = rects[c][0] + 'px';
       card.style.width = rects[c][1] + 'px';
       var img = el('div', 'img', card);
-      img.style.backgroundImage = 'url(' + Data.image(p.backdrop, c === 0 ? 'w1280' : 'w780') + ')';
+      img.style.backgroundImage = 'url(' + Data.image(p.backdrop, c === 0 && !GLASS ? 'w1280' : 'w780') + ')';
       el('div', 'name', card, p.title);
-      if (c === 0 && p.meta) el('div', 'meta', card, p.meta);
+      if (c === 0 && p.meta && !GLASS) el('div', 'meta', card, p.meta);
       hover(card, Z.CARDS, c);
     }
     st.card = Math.min(st.card, Math.max(0, list.length - 1));
     if (!list.length && st.zone === Z.CARDS) st.zone = Z.SHELF;
     backdrop(list.length ? Data.image(list[0].backdrop, 'w300') : '');
     updateFocus();
+  }
+
+  var heroUrl = null, heroFront = 0;
+
+  /** Glass look: the focused pick (the first one, away from the picks) fills the screen, its name and details on it. */
+  function hero() {
+    if (!GLASS) return;
+    var p = cards[st.zone === Z.CARDS ? st.card : 0], info = $('heroinfo');
+    info.firstChild.textContent = p ? p.title : '';
+    info.lastChild.textContent = p ? p.meta : '';
+    var url = p ? Data.image(p.backdrop, 'w1280') : '';
+    if (url === heroUrl) return;
+    heroUrl = url;
+    var shots = $('hero').querySelectorAll('.shot');
+    if (!url) { setClass(shots[0], 'on', false); setClass(shots[1], 'on', false); return; }
+    var img = new Image();
+    img.onload = function () {
+      if (heroUrl !== url) return;
+      var next = 1 - heroFront;
+      shots[next].style.backgroundImage = 'url(' + url + ')';
+      setClass(shots[next], 'on', true);
+      setClass(shots[heroFront], 'on', false);
+      heroFront = next;
+    };
+    img.src = url;
   }
 
   var bgUrl = null, bgFront = 'bgA';
@@ -282,6 +317,9 @@
     var d = new Date(), c = $('clock');
     c.firstChild.textContent = formatDate('format|h:mm', d.getTime());
     c.lastChild.textContent = formatDate('format|EEEE, MMMM d', d.getTime());
+    var n = $('now');
+    n.firstChild.textContent = c.firstChild.textContent;
+    n.lastChild.textContent = c.lastChild.textContent;
   }
 
   // MARK: - Shelf
@@ -800,7 +838,7 @@
   // MARK: - Night, clock, screensaver
 
   function checkNight() {
-    setClass(body, 'night', Data.isNight(Date.now()));
+    setClass(body, 'night', GLASS || Data.isNight(Date.now()));
   }
 
   var saverOn = false, idleAt = Date.now(), saverIndex = 0, saverTimer = 0, SAVER_AFTER = 5 * 60000;
