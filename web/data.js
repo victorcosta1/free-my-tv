@@ -556,25 +556,44 @@ var Data = (function () {
       overview: o.overview || '', vote: o.vote_average || 0, meta: parts.join(' · ')};
   }
 
-  /** Row i of a tab ({title, items}), only titles on the TV's apps; done(null) when there are no more rows. */
-  function browseRow(kind, i, done) {
+  /** Titles a row keeps after leaving out the ones the rows above it show; fewer and it reads a further page. */
+  var ROW_MIN = 10, ROW_PAGES = 3;
+
+  /** Row i of a tab ({title, items}), only titles on the TV's apps and none of `skip` (ids the rows above show);
+      done(null) when there are no more rows. */
+  function browseRow(kind, i, done, skip) {
     var key = kind + ':' + i + ':' + I18N.lang, hit = rowCache[key];
-    if (hit && Date.now() - hit.at < 6 * 3600000) { done(hit.row); return; }
+    if (hit && Date.now() - hit.at > 6 * 3600000) hit = rowCache[key] = null;
+    skip = skip || {};
+    function fresh() {
+      var out = [];
+      for (var j = 0; j < hit.items.length; j++) if (!skip[hit.items[j].id]) out.push(hit.items[j]);
+      return out;
+    }
     rowDefs(kind, function (defs) {
       if (i >= defs.length) { done(null); return; }
       ownProviders(kind, function (err, ids) {
         if (err) { done({title: defs[i].title, items: []}); return; }
-        tmdb('/discover/' + kind + '?language=' + lang() + '&watch_region=' + REGION + '&with_watch_monetization_types=flatrate'
-            + '&include_adult=false&sort_by=popularity.desc&with_watch_providers=' + encodeURIComponent(ids.join('|'))
-            + (CONFIG.hideAnimation ? '&without_genres=' + ANIMATION : '') + defs[i].query, function (e, res) {
-          var items = [], names = genreNames[kind];
-          for (var j = 0; !e && res.results && j < res.results.length; j++) {
-            if (res.results[j].backdrop_path) items.push(rowItem(res.results[j], kind, names));
+        if (!hit) hit = {items: [], page: 0, pages: 1, at: Date.now()};
+        (function more() {
+          if (fresh().length >= ROW_MIN || hit.page >= hit.pages || hit.page >= ROW_PAGES) {
+            done({title: defs[i].title, items: fresh()});
+            return;
           }
-          var row = {title: defs[i].title, items: items};
-          if (!e) rowCache[key] = {row: row, at: Date.now()};
-          done(row);
-        });
+          tmdb('/discover/' + kind + '?language=' + lang() + '&watch_region=' + REGION + '&with_watch_monetization_types=flatrate'
+              + '&include_adult=false&sort_by=popularity.desc&with_watch_providers=' + encodeURIComponent(ids.join('|'))
+              + (CONFIG.hideAnimation ? '&without_genres=' + ANIMATION : '') + defs[i].query + '&page=' + (hit.page + 1), function (e, res) {
+            if (e) { done({title: defs[i].title, items: fresh()}); return; }
+            var names = genreNames[kind];
+            for (var j = 0; res.results && j < res.results.length; j++) {
+              if (res.results[j].backdrop_path) hit.items.push(rowItem(res.results[j], kind, names));
+            }
+            hit.page++;
+            hit.pages = res.total_pages || 0;
+            rowCache[key] = hit;
+            more();
+          });
+        })();
       });
     });
   }

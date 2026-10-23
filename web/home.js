@@ -403,26 +403,31 @@
 
   function openBrowse() {
     var kind = TAB_KIND[st.tab];
-    if (!browse[kind]) browse[kind] = {rows: [], cols: [], next: 0, done: false, loading: false};
+    if (!browse[kind]) browse[kind] = {rows: [], cols: [], seen: {}, next: 0, done: false, loading: false};
     renderBrowse();
     moreRows(kind, 2);
   }
 
-  /** Loads rows one after the other until there are `want` (empty rows are skipped), then draws them. */
+  /** Loads rows one after the other until there are `want` (empty rows are skipped), then draws them. A title shows
+      in one row only, the first: the rows below leave out what's above them (spec/filmes-e-detalhes.md). */
   function moreRows(kind, want) {
     var b = browse[kind];
     if (!b || b.loading || b.done || b.rows.length >= want || (kind !== 'stremio' && !Data.hasKey())) return;
     b.loading = true;
-    (kind === 'stremio' ? Data.stremioRow : function (i, cb) { Data.browseRow(kind, i, cb); })(b.next, function (row) {
+    (kind === 'stremio' ? Data.stremioRow : function (i, cb, skip) { Data.browseRow(kind, i, cb, skip); })(b.next, function (row) {
       b.loading = false;
       if (!row) b.done = true;
       else {
         b.next++;
-        if (row.items.length) { b.rows.push(row); b.cols.push(0); }
+        if (row.items.length) {
+          b.rows.push(row);
+          b.cols.push(0);
+          for (var i = 0; i < row.items.length; i++) b.seen[row.items[i].id] = true;
+        }
       }
       if (b === shown()) { renderBrowse(); updateFocus(); }
       if (row) moreRows(kind, want);
-    });
+    }, b.seen);
   }
 
   /** Draws the rows that aren't on screen yet (it only ever adds; switching tabs starts over). */

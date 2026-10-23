@@ -19,6 +19,8 @@ com uma tela de detalhes ao apertar OK num título. Ao descer pelas linhas, as a
 - Linhas, nesta ordem: Em alta, Lançamentos, depois gêneros (Ação, Comédia, Drama, Ficção
   científica, Animação, Documentário; Séries usa os gêneros de TV do TMDB). Só títulos disponíveis nos apps
   instalados (mesmo filtro dos destaques atuais).
+- Sem repetição: cada título aparece só na primeira linha em que entra; as de baixo deixam de fora o que as de
+  cima mostram. Se sobrarem menos de 10, a linha lê a página seguinte do TMDB (até 3 páginas).
 - Miniaturas 16:9, 340×191, gap 24. ← → anda na linha; ↑ ↓ troca de linha mantendo a coluna mais próxima.
 - Carregamento: na abertura, só o destaque e as 2 primeiras linhas. A próxima linha é pedida quando o foco
   chega a uma linha da última carregada. Linhas vazias não aparecem.
@@ -55,6 +57,7 @@ com uma tela de detalhes ao apertar OK num título. Ao descer pelas linhas, as a
 
 - [x] Explorar idêntico ao atual.
 - [x] Filmes/Séries abre com destaque + 2 linhas e carrega a próxima ao descer.
+- [x] Um título não se repete entre as linhas de uma aba.
 - [x] Barras somem ao descer e voltam ao subir ou com Voltar.
 - [x] OK abre detalhes; Voltar retorna ao mesmo título.
 - [x] Botão principal abre o app instalado certo; sem app, não aparece.
