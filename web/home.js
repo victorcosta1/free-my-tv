@@ -171,8 +171,8 @@
       setClass(list[i], 'focus', st.zone === Z.TOP && st.top === i);
     }
     list = $('buttons').children;
-    for (i = 0; i < list.length; i++) setClass(list[i], 'focus', st.zone === Z.TOP && st.top === 3 + i);
-    setClass($('quotes'), 'hide', st.zone === Z.TOP && st.top >= 3);
+    for (i = 0; i < list.length; i++) setClass(list[i], 'focus', st.zone === Z.TOP && st.top === tabCount() + i);
+    setClass($('quotes'), 'hide', st.zone === Z.TOP && st.top >= tabCount());
     list = $('cards').children;
     for (i = 0; i < list.length; i++) setClass(list[i], 'focus', st.zone === Z.CARDS && st.card === i);
     list = $('tiles').children;
@@ -219,15 +219,26 @@
 
   // MARK: - Top: title, tabs, buttons, quotes
 
-  var TAB_KIND = [null, 'movie', 'tv'];
+  var TAB_KIND = [null, 'movie', 'tv', 'stremio'];
+
+  /** The Stremio app, when it's on the TV: the glass look then has a fourth tab with its addons' catalogs. */
+  function stremioApp() {
+    if (!GLASS) return null;
+    for (var i = 0; i < apps.length; i++) if (/stremio/i.test(apps[i].title) || /stremio/i.test(apps[i].id)) return apps[i];
+    return null;
+  }
+
+  /** How many tabs: Explore, Movies, Shows, and Stremio when its app is installed (glass look). */
+  function tabCount() { return stremioApp() ? 4 : 3; }
 
   function renderTop() {
     $('title').textContent = tr('For You');
     $('scrollhint').textContent = tr('Back: top and apps');
     var tabs = $('tabs');
     tabs.innerHTML = '';
-    var names = [tr('Explore'), tr('Movies'), tr('Shows')];
-    for (var i = 0; i < 3; i++) {
+    var names = [tr('Explore'), tr('Movies'), tr('Shows'), 'Stremio'];
+    if (st.tab >= tabCount()) st.tab = 0;
+    for (var i = 0; i < tabCount(); i++) {
       var t = el('button', 'tab', tabs, names[i]);
       hover(t, Z.TOP, i);
     }
@@ -239,7 +250,7 @@
       r.style.left = (1596 + 88 * b) + 'px';
       sym(defs[b][0], r);
       el('div', 'tip', r, defs[b][1]);
-      hover(r, Z.TOP, 3 + b);
+      hover(r, Z.TOP, tabCount() + b);
     }
   }
 
@@ -315,7 +326,7 @@
     info.querySelector('.meta').textContent = p ? p.meta : '';
     info.querySelector('.over').textContent = p && browsing() ? p.overview : '';
     renderFeatButtons(p);
-    var url = p ? Data.image(p.backdrop, 'w1280') : '';
+    var url = p ? photo(p, 'w1280') : '';
     if (url === heroUrl) return;
     heroUrl = url;
     // Wait until the focus rests: swapping the full-screen photo under the glass on every key press is what's slow.
@@ -379,6 +390,9 @@
 
   function browsing() { return GLASS && st.tab > 0; }
 
+  /** A title's wide photo: the addon's own link (Stremio) or TMDB's at this size. */
+  function photo(item, size) { return item ? item.img || Data.image(item.backdrop, size) : ''; }
+
   /** The rows of the tab on screen: {rows: [{title, items}], cols: [focused column per row], next, done, loading}. */
   function shown() { return browsing() ? browse[TAB_KIND[st.tab]] : null; }
 
@@ -397,9 +411,9 @@
   /** Loads rows one after the other until there are `want` (empty rows are skipped), then draws them. */
   function moreRows(kind, want) {
     var b = browse[kind];
-    if (!b || b.loading || b.done || b.rows.length >= want || !Data.hasKey()) return;
+    if (!b || b.loading || b.done || b.rows.length >= want || (kind !== 'stremio' && !Data.hasKey())) return;
     b.loading = true;
-    Data.browseRow(kind, b.next, function (row) {
+    (kind === 'stremio' ? Data.stremioRow : function (i, cb) { Data.browseRow(kind, i, cb); })(b.next, function (row) {
       b.loading = false;
       if (!row) b.done = true;
       else {
@@ -456,7 +470,7 @@
         var t = strip.children[j], img = t.firstChild, item = b.rows[i].items[j];
         setClass(t, 'focus', st.zone === Z.ROWS && i === st.brow && j === col);
         // Photos only for the rows around the focus: a TV's memory doesn't hold 200 of them.
-        var want = near && j >= col - 4 && j <= col + 6 ? 'url(' + Data.image(item.backdrop, 'w500') + ')' : '';
+        var want = near && j >= col - 4 && j <= col + 6 ? 'url(' + photo(item, 'w500') + ')' : '';
         if (img.getAttribute('data-bg') !== want) { img.setAttribute('data-bg', want); img.style.backgroundImage = want || 'none'; }
       }
     }
@@ -488,24 +502,33 @@
     moreRows(TAB_KIND[st.tab], st.brow + 3);
   }
 
+  /** Where a title plays: Stremio for the Stremio tab's titles, else the installed app TMDB says has it. */
+  function watchOn(item, t) {
+    if (item && item.src === 'stremio') { var s = stremioApp(); return s ? {app: s, name: 'Stremio'} : null; }
+    var app = t && t.app && Data.appFor(t.app);
+    return app ? {app: app, name: t.service} : null;
+  }
+
   /** The featured slide's buttons: Watch on its app (once its details say which), and Details. */
   function featButtons(item) {
     var out = [];
     if (!browsing() || !item) return out;
-    var t = titleNow(item), app = t && t.app && Data.appFor(t.app);
-    if (app) out.push({label: trf('Watch on {app}', {app: t.service}), play: true, run: launcher(app.id, app.title)});
+    var w = watchOn(item, titleNow(item));
+    if (w) out.push({label: trf('Watch on {app}', {app: w.name}), play: true, run: launcher(w.app.id, w.app.title)});
     out.push({label: tr('Details'), run: function () { openDetail(item, false); }});
     return out;
   }
 
   var titles = {};
-  function titleNow(item) { return titles[item.kind + ':' + item.id] || null; }
+  function titleKey(item) { return (item.src || '') + ':' + item.kind + ':' + item.id; }
+  function titleNow(item) { return titles[titleKey(item)] || null; }
 
   /** Asks for a title's details once; redraws what shows it when they arrive. */
   function wantTitle(item, then) {
-    var key = item.kind + ':' + item.id;
+    var key = titleKey(item);
     if (titles[key]) { if (then) then(titles[key]); return; }
-    Data.title(item.kind, item.id, function (err, t) {
+    var ask = item.src === 'stremio' ? function (cb) { Data.stremioTitle(item, cb); } : function (cb) { Data.title(item.kind, item.id, cb); };
+    ask(function (err, t) {
       if (err || !t) { if (then) then(null); return; }
       titles[key] = t;
       if (then) then(t);
@@ -568,7 +591,7 @@
   /** The details screen's two focus rows: the Watch button (when an app has it) and More like this. */
   function detailSections() {
     var t = det && det.t, out = [];
-    if (t && t.app && Data.appFor(t.app)) out.push('watch');
+    if (t && watchOn(det.item, t)) out.push('watch');
     if (t && t.more.length) out.push('more');
     return out;
   }
@@ -577,16 +600,16 @@
     var d = $('detail'), item = det.item, t = det.t;
     d.innerHTML = '';
     var shot = el('div', 'shot', d);
-    shot.style.backgroundImage = 'url(' + Data.image((t && t.backdrop) || item.backdrop, 'w1280') + ')';
+    shot.style.backgroundImage = 'url(' + (t && (t.img || t.backdrop) ? t.img || Data.image(t.backdrop, 'w1280') : photo(item, 'w1280')) + ')';
     el('div', 'fade', d);
     var c = el('div', 'content', d), col = el('div', 'col', c);
-    var eyebrow = [item.kind === 'tv' ? tr('Series') : tr('Movie')];
+    var eyebrow = [item.kind === 'tv' ? tr('Series') : item.kind === 'movie' ? tr('Movie') : (item.stype || item.kind).charAt(0).toUpperCase() + (item.stype || item.kind).slice(1)];
     if (t && t.seasons) eyebrow.push(plural('plural|one:{n} season|other:{n} seasons', t.seasons));
     if (t && t.length) eyebrow.push(t.length >= 60 ? trf('{h}h {m}m', {h: Math.floor(t.length / 60), m: t.length % 60}) : trf('{m}m', {m: t.length}));
     el('div', 'eyebrow', col, eyebrow.join(' · '));
     el('h1', '', col, (t && t.title) || item.title);
     var chips = el('div', 'chips', col), vote = t ? t.vote : item.vote;
-    if (vote) el('span', 'chip score', chips, 'TMDB ' + Data.rating(vote));
+    if (vote) el('span', 'chip score', chips, ((t && t.voteBy) || (t ? 'TMDB' : item.src === 'stremio' ? 'IMDb' : 'TMDB')) + ' ' + Data.rating(vote));
     if (t && t.year) el('span', 'chip', chips, t.year);
     if (t && t.cert) el('span', 'chip', chips, t.cert);
     if (t && t.genres.length) el('span', 'chip', chips, t.genres.join(' · '));
@@ -596,11 +619,11 @@
       el('p', 'by', col, item.kind === 'tv' ? trf('Created by {name}', names) : trf('Directed by {name}', names));
     }
     var btns = el('div', 'btns', col);
-    var app = t && t.app && Data.appFor(t.app);
-    if (app) {
+    var on = t && watchOn(item, t);
+    if (on) {
       var w = el('button', 'fb play', btns);
       sym('play', w, 26);
-      w.appendChild(document.createTextNode(trf('Watch on {app}', {app: t.service})));
+      w.appendChild(document.createTextNode(trf('Watch on {app}', {app: on.name})));
     }
     if (!t) return;
     if (t.where.length) {
@@ -620,6 +643,7 @@
       for (var k = 0; k < t.cast.length && k < 6; k++) {
         var f = el('div', 'face', faces), pic = el('i', '', f);
         if (t.cast[k].photo) pic.style.backgroundImage = 'url(' + Data.image(t.cast[k].photo, 'w185') + ')';
+        else pic.textContent = (t.cast[k].name || '?').charAt(0);
         el('b', '', f, t.cast[k].name);
         el('small', '', f, t.cast[k].role);
       }
@@ -631,7 +655,7 @@
       for (var m = 0; m < t.more.length; m++) {
         var bt = el('div', 'bt', strip);
         bt.style.left = (m * 300) + 'px';
-        el('div', 'img', bt).style.backgroundImage = 'url(' + Data.image(t.more[m].backdrop, 'w300') + ')';
+        el('div', 'img', bt).style.backgroundImage = 'url(' + photo(t.more[m], 'w300') + ')';
         el('div', 'name', bt, t.more[m].title);
       }
     }
@@ -659,8 +683,14 @@
 
   function activateDetail() {
     var sec = detailSections()[st.dsec], t = det && det.t;
-    if (sec === 'watch') { var app = Data.appFor(t.app); if (app) launcher(app.id, app.title)(); }
-    else if (sec === 'more' && t.more[st.di]) openDetail(t.more[st.di], false);
+    if (sec === 'watch') { var on = watchOn(det.item, t); if (on) launcher(on.app.id, on.app.title)(); }
+    else if (sec === 'more' && t.more[st.di]) {
+      // From the Stremio tab, "More like this" also plays in Stremio (TMDB's details, Stremio's button).
+      var next = t.more[st.di];
+      if (det.item.src === 'stremio' && !next.src) next = {id: next.id, kind: next.kind, title: next.title, backdrop: next.backdrop,
+        overview: next.overview, vote: next.vote, meta: next.meta, src: 'stremio', tmdb: next.id, sid: '', base: ''};
+      openDetail(next, false);
+    }
   }
 
   /** The featured slides turn by themselves while nobody presses anything, as on Apple TV. */
@@ -1058,9 +1088,9 @@
   function activate() {
     switch (st.zone) {
       case Z.TOP:
-        if (st.top < 3) return;
-        if (st.top === 3) { var live = liveTV(); if (live) launcher(live.id, tr('Live TV'))(); }
-        else if (st.top === 4) { st.zone = Z.SHELF; openDrawer(); st.drawer = 1 < drawerInputs ? 1 : 0; updateFocus(); }
+        if (st.top < tabCount()) return;
+        if (st.top === tabCount()) { var live = liveTV(); if (live) launcher(live.id, tr('Live TV'))(); }
+        else if (st.top === tabCount() + 1) { st.zone = Z.SHELF; openDrawer(); st.drawer = 1 < drawerInputs ? 1 : 0; updateFocus(); }
         else openSettings();
         return;
       case Z.FEAT:
@@ -1125,11 +1155,11 @@
         break;
       case Z.TOP:
         if (dx) {
-          st.top = Math.max(0, Math.min(5, st.top + dx));
-          if (st.top < 3) selectTab(st.top);   // as on Apple TV: focusing a tab selects it
+          st.top = Math.max(0, Math.min(tabCount() + 2, st.top + dx));
+          if (st.top < tabCount()) selectTab(st.top);   // as on Apple TV: focusing a tab selects it
         } else if (dy > 0) {
           if (browsing() && featured().length) { st.zone = Z.FEAT; st.featBtn = 0; }
-          else if (cards.length) { st.zone = Z.CARDS; st.card = Math.min(cards.length - 1, st.top < 3 ? 0 : cards.length - 1); }
+          else if (cards.length) { st.zone = Z.CARDS; st.card = Math.min(cards.length - 1, st.top < tabCount() ? 0 : cards.length - 1); }
           else st.zone = Z.SHELF;
         }
         break;
@@ -1186,7 +1216,7 @@
       if (zone !== Z.DRAWER && st.zone === Z.DRAWER && zone !== Z.SHELF) return;
       if (zone === Z.SHELF && st.zone === Z.DRAWER) closeDrawer();
       st.zone = zone;
-      if (zone === Z.TOP) { st.top = index; if (index < 3) selectTab(index); }
+      if (zone === Z.TOP) { st.top = index; if (index < tabCount()) selectTab(index); }
       else if (zone === Z.CARDS) st.card = index;
       else if (zone === Z.SHELF) st.shelf = index;
       else if (zone === Z.DRAWER) st.drawer = index;

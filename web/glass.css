@@ -263,7 +263,7 @@
 .lg #detail .cast { position: absolute; left: 1100px; top: 730px; width: 740px; overflow: hidden; }
 .lg #detail .cast .list { white-space: nowrap; }
 .lg #detail .face { display: inline-block; width: 112px; margin-right: 12px; text-align: center; vertical-align: top; white-space: normal; }
-.lg #detail .face i { display: block; width: 104px; height: 104px; margin: 0 auto 10px; border-radius: 52px; background: #2C2C30 center / cover; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14); }
+.lg #detail .face i { display: block; width: 104px; height: 104px; margin: 0 auto 10px; border-radius: 52px; font-style: normal; font-size: 40px; font-weight: 600; line-height: 104px; color: rgba(245, 245, 247, 0.6); background: #2C2C30 center / cover; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14); }
 .lg #detail .face b { display: block; font-size: 17px; font-weight: 600; max-height: 42px; overflow: hidden; }
 .lg #detail .face small { display: block; margin-top: 4px; font-size: 15px; color: rgba(245, 245, 247, 0.62); max-height: 36px; overflow: hidden; }
 .lg #detail .more { position: absolute; left: 0; top: 1010px; width: 1920px; height: 300px; }

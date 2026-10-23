@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.join(ROOT, 'tools'))
 import translate  # noqa: E402  (the catalogues and the keys the web app uses)
 
 GENERIC = {'tmdbKey': '', 'tmdbRegion': '', 'latitude': '', 'longitude': '', 'city': '', 'language': 'auto',
-           'currency': '', 'temperature': 'auto', 'showCrypto': True, 'hideAnimation': False, 'hideApps': [], 'look': 'classic'}
+           'currency': '', 'temperature': 'auto', 'showCrypto': True, 'hideAnimation': False, 'hideApps': [], 'look': 'classic', 'stremioAddons': []}
 
 
 def config_from_args(args):
@@ -59,6 +59,7 @@ def read_config(path):
         'hideAnimation': values.get('hide_animation', 'false').lower() == 'true',
         'hideApps': [s.strip() for s in values.get('hide_apps', '').split(',') if s.strip()],
         'look': look(values.get('look', 'classic')),
+        'stremioAddons': [u.strip() for u in values.get('stremio_addons', '').split(',') if u.strip()],
     }
 
 

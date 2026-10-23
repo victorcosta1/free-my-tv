@@ -637,6 +637,109 @@ var Data = (function () {
     });
   }
 
+  // MARK: - Stremio catalogs (the glass look's Stremio tab, spec/stremio.md): catalogs and metadata only, never streams
+
+  var ADDONS = CONFIG.stremioAddons && CONFIG.stremioAddons.length ? CONFIG.stremioAddons : ['https://v3-cinemeta.strem.io/manifest.json'];
+  var addonDefs = null, addonDefsWaiting = null, addonRows = {};
+
+  function addonBase(url) { return url.replace(/\/manifest\.json(\?.*)?$/, ''); }
+  function addonKind(type) { return type === 'series' ? 'tv' : type === 'movie' ? 'movie' : type; }
+  function addonGet(url, done) { get(url, {Accept: 'application/json'}, done); }
+
+  /** The rows of the Stremio tab, from the addons' manifests: [{base, type, id, extra, title}], up to 12. */
+  function stremioDefs(done) {
+    if (addonDefs) { done(addonDefs); return; }
+    if (addonDefsWaiting) { addonDefsWaiting.push(done); return; }
+    addonDefsWaiting = [done];
+    var defs = [];
+    each(ADDONS, function (url, next) {
+      addonGet(url, function (err, m) {
+        var cats = (!err && m && m.catalogs) || [];
+        for (var i = 0; i < cats.length && defs.length < 12; i++) {
+          var c = cats[i], required = (c.extraRequired || []).slice(), options = c.genres || [];
+          for (var x = 0; c.extra && x < c.extra.length; x++) {
+            var e = c.extra[x];
+            if (e && e.isRequired) required.push(e.name);
+            if (e && e.name === 'genre' && e.options) options = e.options;
+          }
+          var extra = '';
+          if (required.length) {
+            if (required.length > 1 || required[0] !== 'genre' || !options.length) continue;
+            // A genre it can't do without (Cinemeta's New is by year): the newest year, or else the first option.
+            var pick = options[0];
+            for (var o = 0; o < options.length; o++) if (/^\d{4}$/.test(options[o]) && options[o] > pick) pick = options[o];
+            extra = 'genre=' + encodeURIComponent(pick);
+          }
+          var kind = addonKind(c.type);
+          defs.push({base: addonBase(url), type: c.type, id: c.id, extra: extra,
+            title: (c.name || c.id) + ' · ' + (kind === 'movie' ? tr('Movies') : kind === 'tv' ? tr('Shows') : c.type.charAt(0).toUpperCase() + c.type.slice(1))});
+        }
+        next();
+      });
+    }, function () {
+      addonDefs = defs;
+      var waiting = addonDefsWaiting;
+      addonDefsWaiting = null;
+      for (var w = 0; w < waiting.length; w++) waiting[w](defs);
+    });
+  }
+
+  function addonItem(m, base) {
+    var kind = addonKind(m.type), genres = m.genres || m.genre || [];
+    var parts = [kind === 'tv' ? tr('Series') : kind === 'movie' ? tr('Movie') : (m.type || '').charAt(0).toUpperCase() + (m.type || '').slice(1)];
+    if (genres.length) parts.push(genres[0]);
+    if (m.releaseInfo || m.year) parts.push(m.releaseInfo || m.year);
+    return {id: m.moviedb_id || m.id, sid: m.id, src: 'stremio', base: base, stype: m.type, kind: kind,
+      tmdb: m.moviedb_id || 0, title: m.name || '', img: m.background || m.poster || '', overview: m.description || '',
+      vote: parseFloat(m.imdbRating) || 0, meta: parts.join(' · ')};
+  }
+
+  /** Row i of the Stremio tab ({title, items}); done(null) when there are no more rows. */
+  function stremioRow(i, done) {
+    var hit = addonRows[i];
+    if (hit && Date.now() - hit.at < 3 * 3600000) { done(hit.row); return; }
+    stremioDefs(function (defs) {
+      var d = defs[i];
+      if (!d) { done(null); return; }
+      addonGet(d.base + '/catalog/' + d.type + '/' + encodeURIComponent(d.id) + (d.extra ? '/' + d.extra : '') + '.json', function (err, res) {
+        var items = [];
+        for (var j = 0; !err && res && res.metas && j < res.metas.length && items.length < 30; j++) {
+          if (res.metas[j].id && (res.metas[j].background || res.metas[j].poster)) items.push(addonItem(res.metas[j], d.base));
+        }
+        var row = {title: d.title, items: items};
+        if (!err) addonRows[i] = {row: row, at: Date.now()};
+        done(row);
+      });
+    });
+  }
+
+  /** A Stremio title's details: TMDB's when it maps to one (moviedb_id, or an IMDb id TMDB finds), else the addon's. */
+  function stremioTitle(item, done) {
+    if ((item.kind === 'movie' || item.kind === 'tv') && KEY) {
+      if (item.tmdb) { titleDetails(item.kind, item.tmdb, function (e, t) { if (e) addonTitle(item, done); else done(null, t); }); return; }
+      if (/^tt\d+$/.test(item.sid || '')) {
+        tmdb('/find/' + item.sid + '?external_source=imdb_id', function (e, r) {
+          var list = !e && r && (item.kind === 'movie' ? r.movie_results : r.tv_results);
+          if (list && list.length) titleDetails(item.kind, list[0].id, function (e2, t) { if (e2) addonTitle(item, done); else done(null, t); });
+          else addonTitle(item, done);
+        });
+        return;
+      }
+    }
+    addonTitle(item, done);
+  }
+
+  function addonTitle(item, done) {
+    if (!item.base) { done(new Error('no addon')); return; }
+    addonGet(item.base + '/meta/' + item.stype + '/' + encodeURIComponent(item.sid) + '.json', function (err, r) {
+      var m = (!err && r && r.meta) || {}, names = function (list) { return (list || []).map(function (x) { return typeof x === 'string' ? x : x && x.name; }).filter(function (x) { return x; }); };
+      done(null, {id: item.sid, kind: item.kind, title: m.name || item.title, overview: m.description || item.overview,
+        year: ((m.releaseInfo || m.year || '') + '').slice(0, 9), vote: parseFloat(m.imdbRating) || item.vote, voteBy: 'IMDb',
+        img: m.background || item.img, cert: '', genres: (m.genres || m.genre || []).slice(0, 2), by: names(m.director).slice(0, 2),
+        cast: names(m.cast).slice(0, 6).map(function (n) { return {name: n, role: '', photo: ''}; }), where: [], more: [], app: null, service: ''});
+    });
+  }
+
   // MARK: - Formatting
 
   function fmt(v, digits) {
@@ -665,6 +768,8 @@ var Data = (function () {
     picks: now,
     showcase: all,
     browseRow: browseRow,
+    stremioRow: stremioRow,
+    stremioTitle: stremioTitle,
     title: titleDetails,
     /** "7,8": TMDB's score with one decimal, in the TV's language. */
     rating: function (v) { return v ? fmt(v, 1) : ''; },
