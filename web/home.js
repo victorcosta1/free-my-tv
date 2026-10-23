@@ -155,8 +155,10 @@
 
   // MARK: - Focus
 
-  var Z = {TOP: 'top', CARDS: 'cards', SHELF: 'shelf', DRAWER: 'drawer', APPS: 'apps', SETTINGS: 'settings', EDIT: 'edit', LANG: 'lang'};
-  var st = {zone: Z.SHELF, top: 0, tab: 0, card: 0, shelf: 0, drawer: 0, grid: 0, row: 0, edit: 0, lang: 0};
+  var Z = {TOP: 'top', CARDS: 'cards', SHELF: 'shelf', DRAWER: 'drawer', APPS: 'apps', SETTINGS: 'settings', EDIT: 'edit', LANG: 'lang',
+    FEAT: 'feat', ROWS: 'rows', DETAIL: 'detail'};
+  var st = {zone: Z.SHELF, top: 0, tab: 0, card: 0, shelf: 0, drawer: 0, grid: 0, row: 0, edit: 0, lang: 0,
+    feat: 0, featBtn: 0, brow: 0, dsec: 0, di: 0};
   var cards = [];
 
   function sheetOpen() { return st.zone === Z.APPS || st.zone === Z.SETTINGS || st.zone === Z.EDIT || st.zone === Z.LANG; }
@@ -186,6 +188,8 @@
     focusRows($('langpick'), st.lang, st.zone === Z.LANG);
     if (langHint) langHint.textContent = (st.lang + 1) + ' / ' + languageChoices().length + '  ·  ' + tr('OK picks, Back cancels.');
     setClass(body, 'drawer-open', st.zone === Z.DRAWER);
+    focusBrowse();
+    focusDetail();
     hero();
   }
 
@@ -219,6 +223,7 @@
 
   function renderTop() {
     $('title').textContent = tr('For You');
+    $('scrollhint').textContent = tr('Back: top and apps');
     var tabs = $('tabs');
     tabs.innerHTML = '';
     var names = [tr('Explore'), tr('Movies'), tr('Shows')];
@@ -251,8 +256,19 @@
   // MARK: - Picks and background
 
   function renderCards() {
-    var list = Data.picks(TAB_KIND[st.tab]);
     var holder = $('cards');
+    setClass(body, 'browsing', browsing());
+    if (browsing()) {
+      if (holder.children.length) holder.innerHTML = '';
+      cards = [];
+      setClass(body, 'no-picks', false);
+      if (st.zone === Z.CARDS) st.zone = Z.FEAT;
+      openBrowse();
+      updateFocus();
+      return;
+    }
+    if (st.zone === Z.FEAT || st.zone === Z.ROWS) st.zone = Z.SHELF;
+    var list = Data.picks(TAB_KIND[st.tab]);
     setClass(body, 'no-picks', !list.length);
     var same = list.length === cards.length;
     for (var i = 0; same && i < list.length; i++) same = list[i].id === cards[i].id && list[i].backdrop === cards[i].backdrop && list[i].meta === cards[i].meta;
@@ -278,12 +294,27 @@
 
   var heroUrl = null, heroFront = 0, heroTimer = 0;
 
+  /** What fills the screen: the focused pick (Explore), the featured slide or the focused row title (Movies, Shows). */
+  function heroItem() {
+    if (!browsing()) return cards[st.zone === Z.CARDS ? st.card : 0];
+    var b = shown();
+    if (!b || !b.rows.length) return null;
+    if (st.zone === Z.ROWS || (st.zone === Z.DETAIL && detFrom === Z.ROWS)) {
+      var r = b.rows[st.brow];
+      return r ? r.items[b.cols[st.brow] || 0] : null;
+    }
+    var f = featured();
+    return f.length ? f[st.feat % f.length] : null;
+  }
+
   /** Glass look: the focused pick (the first one, away from the picks) fills the screen, its name and details on it. */
   function hero() {
     if (!GLASS) return;
-    var p = cards[st.zone === Z.CARDS ? st.card : 0], info = $('heroinfo');
-    info.firstChild.textContent = p ? p.title : '';
-    info.lastChild.textContent = p ? p.meta : '';
+    var p = heroItem(), info = $('heroinfo');
+    info.querySelector('.name').textContent = p ? p.title : '';
+    info.querySelector('.meta').textContent = p ? p.meta : '';
+    info.querySelector('.over').textContent = p && browsing() ? p.overview : '';
+    renderFeatButtons(p);
     var url = p ? Data.image(p.backdrop, 'w1280') : '';
     if (url === heroUrl) return;
     heroUrl = url;
@@ -340,6 +371,307 @@
     n.firstChild.textContent = c.firstChild.textContent;
     n.lastChild.textContent = c.lastChild.textContent;
   }
+
+  // MARK: - Browse: the glass look's Movies and Shows tabs, as rows by category (spec/filmes-e-detalhes.md)
+
+  var ROW_STEP = 270, THUMB_STEP = 364, ROWS_TOP = 590, ROW_FOCUS_Y = 360, FEATURED = 5;
+  var browse = {}, browseKind = null;
+
+  function browsing() { return GLASS && st.tab > 0; }
+
+  /** The rows of the tab on screen: {rows: [{title, items}], cols: [focused column per row], next, done, loading}. */
+  function shown() { return browsing() ? browse[TAB_KIND[st.tab]] : null; }
+
+  function featured() {
+    var b = shown();
+    return b && b.rows.length ? b.rows[0].items.slice(0, FEATURED) : [];
+  }
+
+  function openBrowse() {
+    var kind = TAB_KIND[st.tab];
+    if (!browse[kind]) browse[kind] = {rows: [], cols: [], next: 0, done: false, loading: false};
+    renderBrowse();
+    moreRows(kind, 2);
+  }
+
+  /** Loads rows one after the other until there are `want` (empty rows are skipped), then draws them. */
+  function moreRows(kind, want) {
+    var b = browse[kind];
+    if (!b || b.loading || b.done || b.rows.length >= want || !Data.hasKey()) return;
+    b.loading = true;
+    Data.browseRow(kind, b.next, function (row) {
+      b.loading = false;
+      if (!row) b.done = true;
+      else {
+        b.next++;
+        if (row.items.length) { b.rows.push(row); b.cols.push(0); }
+      }
+      if (b === shown()) { renderBrowse(); updateFocus(); }
+      if (row) moreRows(kind, want);
+    });
+  }
+
+  /** Draws the rows that aren't on screen yet (it only ever adds; switching tabs starts over). */
+  function renderBrowse() {
+    var holder = $('browse'), box = holder.firstChild, b = shown();
+    if (!b) return;
+    if (browseKind !== TAB_KIND[st.tab]) { box.innerHTML = ''; browseKind = TAB_KIND[st.tab]; }
+    for (var i = box.children.length; i < b.rows.length; i++) {
+      var row = el('div', 'brow', box);
+      row.style.top = (i * ROW_STEP) + 'px';
+      el('h3', '', row, b.rows[i].title);
+      var strip = el('div', 'strip', row);
+      for (var j = 0; j < b.rows[i].items.length; j++) {
+        var t = el('div', 'bt', strip);
+        t.style.left = (j * THUMB_STEP) + 'px';
+        el('div', 'img', t);
+        el('div', 'name', t, b.rows[i].items[j].title);
+      }
+    }
+    renderDots();
+  }
+
+  function renderDots() {
+    var d = $('dots'), n = featured().length;
+    if (d.children.length !== n) {
+      d.innerHTML = '';
+      for (var i = 0; i < n; i++) el('span', '', d);
+    }
+    for (var k = 0; k < d.children.length; k++) setClass(d.children[k], 'on', k === st.feat % Math.max(1, n));
+  }
+
+  /** Where the rows sit, which thumbnail is focused, which photos load; the tabs and shelf leave while in the rows. */
+  function focusBrowse() {
+    var b = shown(), box = $('browse').firstChild, inRows = st.zone === Z.ROWS || (st.zone === Z.DETAIL && detFrom === Z.ROWS);
+    setClass(body, 'scrolled', !!b && inRows);
+    if (!b) return;
+    var y = inRows ? ROW_FOCUS_Y - ROWS_TOP - st.brow * ROW_STEP : 0;
+    box.style.webkitTransform = box.style.transform = 'translateY(' + y + 'px)';
+    var rows = box.children;
+    for (var i = 0; i < rows.length; i++) {
+      var col = b.cols[i] || 0, strip = rows[i].lastChild, near = Math.abs(i - (inRows ? st.brow : 0)) <= 2;
+      setClass(rows[i], 'past', inRows && i < st.brow - 1);
+      strip.style.webkitTransform = strip.style.transform = 'translateX(' + (-Math.max(0, col - 3) * THUMB_STEP) + 'px)';
+      for (var j = 0; j < strip.children.length; j++) {
+        var t = strip.children[j], img = t.firstChild, item = b.rows[i].items[j];
+        setClass(t, 'focus', st.zone === Z.ROWS && i === st.brow && j === col);
+        // Photos only for the rows around the focus: a TV's memory doesn't hold 200 of them.
+        var want = near && j >= col - 4 && j <= col + 6 ? 'url(' + Data.image(item.backdrop, 'w500') + ')' : '';
+        if (img.getAttribute('data-bg') !== want) { img.setAttribute('data-bg', want); img.style.backgroundImage = want || 'none'; }
+      }
+    }
+    renderDots();
+    var btns = $('featbtns').children;
+    for (var k = 0; k < btns.length; k++) setClass(btns[k], 'focus', st.zone === Z.FEAT && k === st.featBtn);
+  }
+
+  function moveBrowse(dx, dy) {
+    var b = shown(), f = featured();
+    if (!b) return;
+    if (st.zone === Z.FEAT) {
+      var n = featButtons(heroItem()).length;
+      if (dx > 0 && st.featBtn + 1 < n) st.featBtn++;
+      else if (dx > 0 && f.length) { st.feat = (st.feat + 1) % f.length; st.featBtn = 0; }
+      else if (dx < 0 && st.featBtn > 0) st.featBtn--;
+      else if (dx < 0 && f.length) { st.feat = (st.feat + f.length - 1) % f.length; st.featBtn = 0; }
+      else if (dy < 0) { st.zone = Z.TOP; st.top = st.tab; }
+      else if (dy > 0 && b.rows.length) { st.zone = Z.ROWS; st.brow = 0; }
+      return;
+    }
+    if (dx) b.cols[st.brow] = Math.max(0, Math.min(b.rows[st.brow].items.length - 1, (b.cols[st.brow] || 0) + dx));
+    else if (dy < 0) { if (st.brow > 0) st.brow--; else { st.zone = Z.FEAT; st.featBtn = 0; } }
+    else if (dy > 0 && st.brow + 1 < b.rows.length) {
+      var col = b.cols[st.brow] || 0;
+      st.brow++;
+      b.cols[st.brow] = Math.min(b.rows[st.brow].items.length - 1, Math.max(b.cols[st.brow] || 0, col));
+    }
+    moreRows(TAB_KIND[st.tab], st.brow + 3);
+  }
+
+  /** The featured slide's buttons: Watch on its app (once its details say which), and Details. */
+  function featButtons(item) {
+    var out = [];
+    if (!browsing() || !item) return out;
+    var t = titleNow(item), app = t && t.app && Data.appFor(t.app);
+    if (app) out.push({label: trf('Watch on {app}', {app: t.service}), play: true, run: launcher(app.id, app.title)});
+    out.push({label: tr('Details'), run: function () { openDetail(item, false); }});
+    return out;
+  }
+
+  var titles = {};
+  function titleNow(item) { return titles[item.kind + ':' + item.id] || null; }
+
+  /** Asks for a title's details once; redraws what shows it when they arrive. */
+  function wantTitle(item, then) {
+    var key = item.kind + ':' + item.id;
+    if (titles[key]) { if (then) then(titles[key]); return; }
+    Data.title(item.kind, item.id, function (err, t) {
+      if (err || !t) { if (then) then(null); return; }
+      titles[key] = t;
+      if (then) then(t);
+      if (heroItem() === item) renderFeatButtons(item);
+    });
+  }
+
+  var featFor = null;
+  function renderFeatButtons(item) {
+    var box = $('featbtns');
+    if (!browsing() || !item) { if (box.children.length) box.innerHTML = ''; featFor = null; return; }
+    var list = featButtons(item), sig = item.kind + item.id + ':' + list.length;
+    if (sig !== featFor) {
+      featFor = sig;
+      box.innerHTML = '';
+      for (var i = 0; i < list.length; i++) {
+        var btn = el('button', 'fb' + (list[i].play ? ' play' : ''), box);
+        if (list[i].play) sym('play', btn, 26);
+        btn.appendChild(document.createTextNode(list[i].label));
+      }
+      st.featBtn = Math.min(st.featBtn, list.length - 1);
+    }
+    for (var k = 0; k < box.children.length; k++) setClass(box.children[k], 'focus', st.zone === Z.FEAT && k === st.featBtn);
+    if (!titleNow(item)) wantTitle(item);
+  }
+
+  // MARK: - Title details: OK on a row title or the featured slide's Details
+
+  var det = null, detStack = [], detFrom = null;
+
+  function openDetail(item, keepStack) {
+    if (st.zone !== Z.DETAIL) { detFrom = st.zone; detStack = []; }
+    else if (!keepStack && det) detStack.push(det.item);
+    det = {item: item, t: titleNow(item)};
+    st.zone = Z.DETAIL;
+    st.dsec = 0;
+    st.di = 0;
+    renderDetail();
+    setClass($('detail'), 'open', true);
+    updateFocus();
+    if (!det.t) {
+      wantTitle(item, function (t) {
+        if (!det || det.item !== item) return;
+        det.t = t;
+        det.failed = !t;
+        renderDetail();
+        updateFocus();
+      });
+    }
+  }
+
+  function closeDetail() {
+    if (detStack.length) { openDetail(detStack.pop(), true); return; }
+    det = null;
+    setClass($('detail'), 'open', false);
+    st.zone = detFrom || Z.SHELF;
+    updateFocus();
+  }
+
+  /** The details screen's two focus rows: the Watch button (when an app has it) and More like this. */
+  function detailSections() {
+    var t = det && det.t, out = [];
+    if (t && t.app && Data.appFor(t.app)) out.push('watch');
+    if (t && t.more.length) out.push('more');
+    return out;
+  }
+
+  function renderDetail() {
+    var d = $('detail'), item = det.item, t = det.t;
+    d.innerHTML = '';
+    var shot = el('div', 'shot', d);
+    shot.style.backgroundImage = 'url(' + Data.image((t && t.backdrop) || item.backdrop, 'w1280') + ')';
+    el('div', 'fade', d);
+    var c = el('div', 'content', d), col = el('div', 'col', c);
+    var eyebrow = [item.kind === 'tv' ? tr('Series') : tr('Movie')];
+    if (t && t.seasons) eyebrow.push(plural('plural|one:{n} season|other:{n} seasons', t.seasons));
+    if (t && t.length) eyebrow.push(t.length >= 60 ? trf('{h}h {m}m', {h: Math.floor(t.length / 60), m: t.length % 60}) : trf('{m}m', {m: t.length}));
+    el('div', 'eyebrow', col, eyebrow.join(' · '));
+    el('h1', '', col, (t && t.title) || item.title);
+    var chips = el('div', 'chips', col), vote = t ? t.vote : item.vote;
+    if (vote) el('span', 'chip score', chips, 'TMDB ' + Data.rating(vote));
+    if (t && t.year) el('span', 'chip', chips, t.year);
+    if (t && t.cert) el('span', 'chip', chips, t.cert);
+    if (t && t.genres.length) el('span', 'chip', chips, t.genres.join(' · '));
+    el('p', 'over', col, (t && t.overview) || item.overview || '');
+    if (t && t.by.length) {
+      var names = {name: t.by.join(', ')};
+      el('p', 'by', col, item.kind === 'tv' ? trf('Created by {name}', names) : trf('Directed by {name}', names));
+    }
+    var btns = el('div', 'btns', col);
+    var app = t && t.app && Data.appFor(t.app);
+    if (app) {
+      var w = el('button', 'fb play', btns);
+      sym('play', w, 26);
+      w.appendChild(document.createTextNode(trf('Watch on {app}', {app: t.service})));
+    }
+    if (!t) return;
+    if (t.where.length) {
+      var where = el('div', 'where', c);
+      el('h2', '', where, tr('Where to watch'));
+      var list = el('div', 'list', where);
+      for (var i = 0; i < t.where.length && i < 6; i++) {
+        var x = t.where[i], own = x.installed && x.how === 'flatrate', chip = el('span', 'chip' + (own ? ' own' : ''), list, x.name);
+        var how = x.how === 'rent' ? tr('Rent') : x.how === 'buy' ? tr('Buy') : own ? tr('Installed') : '';
+        if (how) el('small', '', chip, ' · ' + how);
+      }
+    }
+    if (t.cast.length) {
+      var cast = el('div', 'cast', c);
+      el('h2', '', cast, tr('Cast'));
+      var faces = el('div', 'list', cast);
+      for (var k = 0; k < t.cast.length && k < 6; k++) {
+        var f = el('div', 'face', faces), pic = el('i', '', f);
+        if (t.cast[k].photo) pic.style.backgroundImage = 'url(' + Data.image(t.cast[k].photo, 'w185') + ')';
+        el('b', '', f, t.cast[k].name);
+        el('small', '', f, t.cast[k].role);
+      }
+    }
+    if (t.more.length) {
+      var more = el('div', 'more', c);
+      el('h2', '', more, tr('More like this'));
+      var strip = el('div', 'strip', more);
+      for (var m = 0; m < t.more.length; m++) {
+        var bt = el('div', 'bt', strip);
+        bt.style.left = (m * 300) + 'px';
+        el('div', 'img', bt).style.backgroundImage = 'url(' + Data.image(t.more[m].backdrop, 'w300') + ')';
+        el('div', 'name', bt, t.more[m].title);
+      }
+    }
+  }
+
+  function focusDetail() {
+    var d = $('detail');
+    if (!det || st.zone !== Z.DETAIL) return;
+    var secs = detailSections();
+    st.dsec = Math.max(0, Math.min(secs.length - 1, st.dsec));
+    var sec = secs[st.dsec], btn = d.querySelector('.btns .fb'), strip = d.querySelector('.more .strip');
+    if (btn) setClass(btn, 'focus', sec === 'watch');
+    setClass(d, 'low', sec === 'more');
+    if (strip) {
+      for (var i = 0; i < strip.children.length; i++) setClass(strip.children[i], 'focus', sec === 'more' && i === st.di);
+      strip.style.webkitTransform = strip.style.transform = 'translateX(' + (-Math.max(0, st.di - 4) * 300) + 'px)';
+    }
+  }
+
+  function moveDetail(dx, dy) {
+    var secs = detailSections(), t = det && det.t;
+    if (dy) st.dsec = Math.max(0, Math.min(secs.length - 1, st.dsec + dy));
+    else if (dx && secs[st.dsec] === 'more') st.di = Math.max(0, Math.min(t.more.length - 1, st.di + dx));
+  }
+
+  function activateDetail() {
+    var sec = detailSections()[st.dsec], t = det && det.t;
+    if (sec === 'watch') { var app = Data.appFor(t.app); if (app) launcher(app.id, app.title)(); }
+    else if (sec === 'more' && t.more[st.di]) openDetail(t.more[st.di], false);
+  }
+
+  /** The featured slides turn by themselves while nobody presses anything, as on Apple TV. */
+  setInterval(function () {
+    var f = featured();
+    if (!browsing() || f.length < 2 || saverOn || sheetOpen() || st.zone === Z.ROWS || st.zone === Z.DETAIL || st.zone === Z.DRAWER) return;
+    if (Date.now() - idleAt < 9000) return;
+    st.feat = (st.feat + 1) % f.length;
+    st.featBtn = 0;
+    updateFocus();
+  }, 9000);
 
   // MARK: - Shelf
 
@@ -731,6 +1063,17 @@
         else if (st.top === 4) { st.zone = Z.SHELF; openDrawer(); st.drawer = 1 < drawerInputs ? 1 : 0; updateFocus(); }
         else openSettings();
         return;
+      case Z.FEAT:
+        var fb = featButtons(heroItem());
+        if (fb[st.featBtn]) fb[st.featBtn].run();
+        return;
+      case Z.ROWS:
+        var b = shown(), item = b && b.rows[st.brow] && b.rows[st.brow].items[b.cols[st.brow] || 0];
+        if (item) openDetail(item, false);
+        return;
+      case Z.DETAIL:
+        activateDetail();
+        return;
       case Z.CARDS:
         var p = cards[st.card], app = p && Data.appFor(p.app);
         if (app) launcher(app.id, app.title)();
@@ -770,7 +1113,8 @@
         if (dx) st.shelf = Math.max(0, Math.min(shelf.length - 1, st.shelf + dx));
         else if (dy > 0) { openDrawer(); return; }
         else if (dy < 0) {
-          if (cards.length) { st.zone = Z.CARDS; st.card = nearest(cardNodes, centerX(tiles[st.shelf])); }
+          if (browsing()) { if (featured().length) { st.zone = Z.FEAT; st.featBtn = 0; } else { st.zone = Z.TOP; st.top = st.tab; } }
+          else if (cards.length) { st.zone = Z.CARDS; st.card = nearest(cardNodes, centerX(tiles[st.shelf])); }
           else { st.zone = Z.TOP; st.top = st.tab; }
         }
         break;
@@ -784,9 +1128,17 @@
           st.top = Math.max(0, Math.min(5, st.top + dx));
           if (st.top < 3) selectTab(st.top);   // as on Apple TV: focusing a tab selects it
         } else if (dy > 0) {
-          if (cards.length) { st.zone = Z.CARDS; st.card = Math.min(cards.length - 1, st.top < 3 ? 0 : cards.length - 1); }
+          if (browsing() && featured().length) { st.zone = Z.FEAT; st.featBtn = 0; }
+          else if (cards.length) { st.zone = Z.CARDS; st.card = Math.min(cards.length - 1, st.top < 3 ? 0 : cards.length - 1); }
           else st.zone = Z.SHELF;
         }
+        break;
+      case Z.FEAT:
+      case Z.ROWS:
+        moveBrowse(dx, dy);
+        break;
+      case Z.DETAIL:
+        moveDetail(dx, dy);
         break;
       case Z.DRAWER:
         if (dx) st.drawer = Math.max(0, Math.min(drawerItems.length - 1, st.drawer + dx));
@@ -819,6 +1171,9 @@
     if (st.zone === Z.LANG) { closeLanguages(false); return; }
     if (sheetOpen()) { closeSheets(); return; }
     if (st.zone === Z.DRAWER) { closeDrawer(); return; }
+    if (st.zone === Z.DETAIL) { closeDetail(); return; }
+    // Glass look, Movies and Shows: Back from the rows scrolls to the top and brings the tabs and the shelf back.
+    if (st.zone === Z.ROWS) { st.zone = Z.FEAT; st.featBtn = 0; updateFocus(); return; }
     if (st.zone !== Z.SHELF && shelf.length) { st.zone = Z.SHELF; updateFocus(); return; }
     TV.back();
   }

@@ -130,3 +130,142 @@
     backdrop-filter: none;
   }
 }
+
+/* MARK: - Movies and Shows: rows by category (spec/filmes-e-detalhes.md) */
+
+#browse, #scrollhint, #dots, #detail { display: none; }
+.lg.browsing #browse, .lg.browsing #dots { display: block; }
+.lg.browsing #cards { display: none; }
+
+.lg #heroinfo .over:empty, .lg #featbtns:empty { display: none; }
+.lg #heroinfo .over {
+  margin-top: 16px;
+  max-width: 820px;
+  max-height: 76px;
+  overflow: hidden;
+  font-size: 25px;
+  line-height: 38px;
+  color: rgba(245, 245, 247, 0.86);
+}
+.lg.browsing #heroinfo { bottom: 540px; }
+.lg.browsing #heroinfo .name { font-size: 88px; max-height: 176px; }
+
+.lg #featbtns { margin-top: 26px; height: 72px; white-space: nowrap; }
+.lg .fb {
+  display: inline-block;
+  height: 68px;
+  padding: 0 34px;
+  margin-right: 16px;
+  border-radius: 34px;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 68px;
+  color: #F5F5F7;
+  background: rgba(58, 58, 66, 0.55);
+  box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.3), inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  -webkit-transition: -webkit-transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.1), background-color 0.15s;
+  transition: transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.1), background-color 0.15s;
+}
+.lg .fb .sym { width: 26px; height: 26px; margin-right: 12px; vertical-align: -4px; }
+.lg .fb.focus { background: #FFF; color: #0B0C10; -webkit-transform: scale(1.06); transform: scale(1.06); box-shadow: 0 20px 44px rgba(0, 0, 0, 0.5); }
+
+.lg #dots { position: absolute; left: 80px; top: 558px; height: 10px; }
+.lg #dots span { display: inline-block; width: 10px; height: 10px; margin-right: 10px; border-radius: 5px; background: rgba(245, 245, 247, 0.4); -webkit-transition: width 0.25s; transition: width 0.25s; }
+.lg #dots span.on { width: 34px; background: #F5F5F7; }
+
+.lg #browse { position: absolute; left: 0; top: 590px; width: 1920px; height: 490px; }
+.lg #browse .box { position: absolute; left: 0; top: 0; width: 1920px; -webkit-transition: -webkit-transform 0.3s cubic-bezier(0.32, 0.72, 0, 1); transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1); }
+.lg .brow { position: absolute; left: 0; width: 1920px; height: 250px; }
+.lg .brow h3 { position: absolute; left: 80px; top: 0; margin: 0; font-size: 26px; font-weight: 600; white-space: nowrap; color: #F5F5F7; }
+.lg .brow { -webkit-transition: opacity 0.25s; transition: opacity 0.25s; }
+/* At the top only the first row shows, above the shelf; the others come in on the way down. */
+.lg.browsing:not(.scrolled) .brow + .brow { opacity: 0; }
+.lg .brow.past { opacity: 0; }
+.lg .brow .strip, .lg #detail .strip {
+  position: absolute;
+  left: 80px;
+  top: 52px;
+  height: 191px;
+  -webkit-transition: -webkit-transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+  transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.lg .bt {
+  position: absolute;
+  top: 0;
+  width: 340px;
+  height: 191px;
+  border-radius: 24px;
+  overflow: hidden;
+  background: #1C1C1E;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+  -webkit-transition: -webkit-transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.1);
+  transition: transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.1);
+}
+.lg .bt .img { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background-size: cover; background-position: center; }
+.lg .bt::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 60%; background: linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.7)); }
+.lg .bt .name { position: absolute; left: 18px; right: 18px; bottom: 14px; z-index: 1; color: #F5F5F7; font-size: 20px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lg .bt.focus { -webkit-transform: scale(1.08); transform: scale(1.08); z-index: 2; box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.9), 0 30px 60px rgba(0, 0, 0, 0.6); }
+
+/* Down in the rows, the tabs leave upwards and the shelf downwards; they come back the same way (0.25 s, no bounce). */
+.lg #tabs, .lg #buttons, .lg #now, .lg #platter, .lg #tiles, .lg #heroinfo, .lg #dots, .lg #hero {
+  -webkit-transition: -webkit-transform 0.25s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s;
+  transition: transform 0.25s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s;
+}
+.lg.scrolled #tabs, .lg.scrolled #now { -webkit-transform: translateY(-40px); transform: translateY(-40px); opacity: 0; }
+.lg.scrolled #buttons { -webkit-transform: translate(-24px, -40px); transform: translate(-24px, -40px); opacity: 0; }
+.lg.scrolled #platter, .lg.scrolled #tiles { -webkit-transform: translateY(40px); transform: translateY(40px); opacity: 0; }
+.lg.scrolled #heroinfo, .lg.scrolled #dots { opacity: 0; }
+.lg.scrolled #hero { opacity: 0.35; }
+.lg.scrolled #scrollhint { display: block; }
+.lg #scrollhint { position: absolute; right: 80px; top: 64px; font-size: 20px; font-weight: 500; color: rgba(245, 245, 247, 0.55); }
+
+/* MARK: - Title details */
+
+.lg #detail { display: block; z-index: 3; color: #F5F5F7; background: #07080B; opacity: 0; visibility: hidden; -webkit-transition: opacity 0.25s, visibility 0s 0.25s; transition: opacity 0.25s, visibility 0s 0.25s; }
+.lg #detail.open { display: block; opacity: 1; visibility: visible; -webkit-transition-delay: 0s; transition-delay: 0s; }
+.lg #detail .shot { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background-size: cover; background-position: center top; }
+.lg #detail .fade {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(7, 8, 11, 0.92) 0%, rgba(7, 8, 11, 0.55) 42%, rgba(7, 8, 11, 0) 68%),
+    linear-gradient(180deg, rgba(7, 8, 11, 0) 40%, rgba(7, 8, 11, 0.96) 76%);
+}
+.lg #detail .content { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; -webkit-transition: -webkit-transform 0.3s cubic-bezier(0.32, 0.72, 0, 1); transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1); }
+.lg #detail.low .content { -webkit-transform: translateY(-300px); transform: translateY(-300px); }
+.lg #detail .col { position: absolute; left: 80px; top: 120px; width: 940px; text-shadow: 0 2px 20px rgba(0, 0, 0, 0.35); }
+.lg #detail .eyebrow { font-size: 20px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(245, 245, 247, 0.78); }
+.lg #detail h1 { margin: 16px 0 0; max-height: 184px; overflow: hidden; font-size: 92px; font-weight: 700; letter-spacing: -0.03em; line-height: 1; }
+.lg #detail .chips { margin-top: 20px; white-space: nowrap; }
+.lg #detail .chip {
+  display: inline-block;
+  height: 40px;
+  padding: 0 16px;
+  margin: 0 10px 10px 0;
+  border-radius: 20px;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 40px;
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+.lg #detail .chip.score { color: #F5C542; }
+.lg #detail .chip small { font-size: 16px; font-weight: 500; color: rgba(245, 245, 247, 0.7); }
+.lg #detail .over { margin: 14px 0 0; max-width: 880px; max-height: 152px; overflow: hidden; font-size: 25px; line-height: 38px; color: rgba(245, 245, 247, 0.88); }
+.lg #detail .by { margin: 14px 0 0; font-size: 21px; color: rgba(245, 245, 247, 0.65); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lg #detail .btns { margin-top: 26px; height: 72px; }
+.lg #detail h2 { margin: 0 0 16px; font-size: 24px; font-weight: 600; }
+.lg #detail .where { position: absolute; left: 80px; top: 730px; width: 960px; }
+.lg #detail .where .chip { height: 52px; padding: 0 22px; line-height: 52px; font-size: 21px; opacity: 0.6; }
+.lg #detail .where .chip.own { opacity: 1; background: rgba(255, 255, 255, 0.22); }
+.lg #detail .cast { position: absolute; left: 1100px; top: 730px; width: 740px; overflow: hidden; }
+.lg #detail .cast .list { white-space: nowrap; }
+.lg #detail .face { display: inline-block; width: 112px; margin-right: 12px; text-align: center; vertical-align: top; white-space: normal; }
+.lg #detail .face i { display: block; width: 104px; height: 104px; margin: 0 auto 10px; border-radius: 52px; background: #2C2C30 center / cover; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14); }
+.lg #detail .face b { display: block; font-size: 17px; font-weight: 600; max-height: 42px; overflow: hidden; }
+.lg #detail .face small { display: block; margin-top: 4px; font-size: 15px; color: rgba(245, 245, 247, 0.62); max-height: 36px; overflow: hidden; }
+.lg #detail .more { position: absolute; left: 0; top: 1010px; width: 1920px; height: 300px; }
+.lg #detail .more h2 { position: absolute; left: 80px; top: 0; }
+.lg #detail .more .bt { width: 276px; height: 155px; }

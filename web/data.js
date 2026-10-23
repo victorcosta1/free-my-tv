@@ -498,6 +498,145 @@ var Data = (function () {
     return out;
   }
 
+  // MARK: - Browse rows and title details (the glass look's Movies and Shows tabs, spec/filmes-e-detalhes.md)
+
+  /** TMDB genres for the rows after Popular and New, in this order; Animation is left out with hide_animation. */
+  var ROW_GENRES = {movie: [28, 35, 18, 878, 16, 99, 27, 10749], tv: [10759, 35, 18, 10765, 16, 99, 80, 9648]};
+  var genreNames = {movie: null, tv: null}, providerIds = {movie: null, tv: null}, rowCache = {}, titleCache = {};
+
+  /** The TMDB ids of the services whose apps are on this TV (in this country), for one kind. */
+  function ownProviders(kind, done) {
+    if (providerIds[kind]) { done(null, providerIds[kind]); return; }
+    tmdb('/watch/providers/' + kind + '?language=' + lang() + '&watch_region=' + REGION, function (err, res) {
+      if (err) { done(err); return; }
+      var ids = [];
+      for (var i = 0; res.results && i < res.results.length; i++) {
+        var s = service(res.results[i].provider_name);
+        if (s && appFor(s[1])) ids.push(res.results[i].provider_id);
+      }
+      if (ids.length) providerIds[kind] = ids;
+      done(ids.length ? null : new Error("none of the TV's streaming apps are on TMDB"), ids);
+    });
+  }
+
+  function genresOf(kind, done) {
+    if (genreNames[kind]) { done(genreNames[kind]); return; }
+    tmdb('/genre/' + kind + '/list?language=' + lang(), function (err, res) {
+      var map = {};
+      for (var i = 0; !err && res.genres && i < res.genres.length; i++) map[res.genres[i].id] = genre(res.genres[i].name);
+      if (!err) genreNames[kind] = map;
+      done(map);
+    });
+  }
+
+  /** The rows of a tab: [{title, query}], Popular now and New releases first, then genres. */
+  function rowDefs(kind, done) {
+    genresOf(kind, function (names) {
+      var defs = [{title: tr('Popular now'), query: ''}];
+      defs.push({title: tr('New releases'), query: kind === 'movie'
+        ? '&vote_count.gte=30&primary_release_date.gte=' + day(-365) + '&primary_release_date.lte=' + day(0)
+        : '&vote_count.gte=20&air_date.gte=' + day(-90) + '&air_date.lte=' + day(0)});
+      var ids = ROW_GENRES[kind];
+      for (var i = 0; i < ids.length; i++) {
+        if (ids[i] === ANIMATION && CONFIG.hideAnimation) continue;
+        if (names[ids[i]]) defs.push({title: names[ids[i]], query: '&with_genres=' + ids[i]});
+      }
+      done(defs);
+    });
+  }
+
+  function year(o) { return ((o.release_date || o.first_air_date || '') + '').slice(0, 4); }
+
+  /** A row item from TMDB's list result: enough for the thumbnail and the featured slide (no request per title). */
+  function rowItem(o, kind, names) {
+    var parts = [kind === 'tv' ? tr('Series') : tr('Movie')];
+    if (o.genre_ids && o.genre_ids.length && names && names[o.genre_ids[0]]) parts.push(names[o.genre_ids[0]]);
+    if (year(o)) parts.push(year(o));
+    return {id: o.id, kind: kind, title: kind === 'movie' ? o.title : o.name, backdrop: o.backdrop_path,
+      overview: o.overview || '', vote: o.vote_average || 0, meta: parts.join(' · ')};
+  }
+
+  /** Row i of a tab ({title, items}), only titles on the TV's apps; done(null) when there are no more rows. */
+  function browseRow(kind, i, done) {
+    var key = kind + ':' + i + ':' + I18N.lang, hit = rowCache[key];
+    if (hit && Date.now() - hit.at < 6 * 3600000) { done(hit.row); return; }
+    rowDefs(kind, function (defs) {
+      if (i >= defs.length) { done(null); return; }
+      ownProviders(kind, function (err, ids) {
+        if (err) { done({title: defs[i].title, items: []}); return; }
+        tmdb('/discover/' + kind + '?language=' + lang() + '&watch_region=' + REGION + '&with_watch_monetization_types=flatrate'
+            + '&include_adult=false&sort_by=popularity.desc&with_watch_providers=' + encodeURIComponent(ids.join('|'))
+            + (CONFIG.hideAnimation ? '&without_genres=' + ANIMATION : '') + defs[i].query, function (e, res) {
+          var items = [], names = genreNames[kind];
+          for (var j = 0; !e && res.results && j < res.results.length; j++) {
+            if (res.results[j].backdrop_path) items.push(rowItem(res.results[j], kind, names));
+          }
+          var row = {title: defs[i].title, items: items};
+          if (!e) rowCache[key] = {row: row, at: Date.now()};
+          done(row);
+        });
+      });
+    });
+  }
+
+  /** Brazil's (the region's) age rating, when TMDB has one. */
+  function certification(o, kind) {
+    var list = kind === 'movie' ? o.release_dates && o.release_dates.results : o.content_ratings && o.content_ratings.results;
+    for (var i = 0; list && i < list.length; i++) {
+      if (list[i].iso_3166_1 !== REGION) continue;
+      if (kind === 'tv') return list[i].rating || '';
+      for (var j = 0; list[i].release_dates && j < list[i].release_dates.length; j++) {
+        if (list[i].release_dates[j].certification) return list[i].release_dates[j].certification;
+      }
+    }
+    return '';
+  }
+
+  /** Everything the details screen shows; done(err, t). Kept for the session, so reopening a title is instant. */
+  function titleDetails(kind, id, done) {
+    var key = kind + ':' + id + ':' + I18N.lang;
+    if (titleCache[key]) { done(null, titleCache[key]); return; }
+    tmdb('/' + kind + '/' + id + '?language=' + lang() + '&append_to_response=watch/providers,credits,recommendations,images,'
+        + (kind === 'movie' ? 'release_dates' : 'content_ratings') + '&include_image_language=null,' + I18N.base + ',en', function (err, o) {
+      if (err) { done(err); return; }
+      var t = {id: id, kind: kind, title: kind === 'movie' ? o.title : o.name, overview: o.overview || '', year: year(o),
+        vote: o.vote_average || 0, backdrop: bestBackdrop(o.images) || o.backdrop_path, cert: certification(o, kind),
+        genres: (o.genres || []).slice(0, 2).map(function (g) { return genre(g.name); }), by: [], cast: [], where: [], more: [],
+        app: null, service: ''};
+      if (kind === 'movie') {
+        if (o.runtime > 0) t.length = o.runtime;
+        var crew = (o.credits && o.credits.crew) || [];
+        for (var c = 0; c < crew.length && t.by.length < 2; c++) if (crew[c].job === 'Director') t.by.push(crew[c].name);
+      } else {
+        t.seasons = o.number_of_seasons || 0;
+        for (var b = 0; o.created_by && b < o.created_by.length && t.by.length < 2; b++) t.by.push(o.created_by[b].name);
+      }
+      var cast = (o.credits && o.credits.cast) || [];
+      for (var k = 0; k < cast.length && t.cast.length < 8; k++) {
+        t.cast.push({name: cast[k].name, role: cast[k].character || '', photo: cast[k].profile_path || ''});
+      }
+      // Where to watch here: each service once, its kind (subscription, rent, buy) and whether its app is on the TV.
+      var wp = o['watch/providers'], here = wp && wp.results && wp.results[REGION], seen = {}, kinds = ['flatrate', 'rent', 'buy'];
+      for (var w = 0; here && w < kinds.length; w++) {
+        var list = here[kinds[w]] || [];
+        for (var q = 0; q < list.length; q++) {
+          var name = list[q].provider_name, s = service(name);
+          if (seen[name]) continue;
+          seen[name] = true;
+          var app = s ? appFor(s[1]) : null;
+          t.where.push({name: s ? s[4] : name, how: kinds[w], installed: !!app});
+          if (!t.app && app && kinds[w] === 'flatrate') { t.app = s[1]; t.service = s[4]; }
+        }
+      }
+      var recs = (o.recommendations && o.recommendations.results) || [];
+      for (var r = 0; r < recs.length && t.more.length < 12; r++) {
+        if (recs[r].backdrop_path) t.more.push(rowItem(recs[r], recs[r].media_type === 'movie' || recs[r].media_type === 'tv' ? recs[r].media_type : kind, null));
+      }
+      titleCache[key] = t;
+      done(null, t);
+    });
+  }
+
   // MARK: - Formatting
 
   function fmt(v, digits) {
@@ -525,6 +664,10 @@ var Data = (function () {
     recsError: function () { return recsError; },
     picks: now,
     showcase: all,
+    browseRow: browseRow,
+    title: titleDetails,
+    /** "7,8": TMDB's score with one decimal, in the TV's language. */
+    rating: function (v) { return v ? fmt(v, 1) : ''; },
     image: function (path, size) { return path ? 'https://image.tmdb.org/t/p/' + (size || 'w1280') + path : ''; },
 
     /** Night at the location: from sunset to sunrise (the last forecast; without one, 6:00 and 18:00). */
