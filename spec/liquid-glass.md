@@ -51,13 +51,16 @@ tema escuro e vidro real (`backdrop-filter`) nas abas, botões, barra de apps e 
 5. **Relógio** (`#now`): hora 34 px/600 + data 20 px, à esquerda dos botões.
 6. **Destaques**: três miniaturas 16:9 (330×186) em top 620, acima da barra, a partir de x=80. Nome dentro da miniatura.
    Focado: escala 1,08 + borda branca 3 px.
-7. **Barra de apps**: mesma geometria de hoje, `#platter` em vidro real. Tile focado como hoje.
+7. **Barra de apps**: mesma geometria de hoje, `#platter` em vidro real. Tile focado como hoje. O primeiro tile é
+   **TV ao vivo** (abre a entrada de TV ao vivo); o editor da barra fica com até 7 apps.
 8. **Painel** (↓): `.glass`, `.key` e `.panel` em vidro real e cantos maiores.
 9. **Folhas** (Todos os apps, Ajustes): fundo `rgba(0,0,0,0.55)` + blur 30 px.
 
 ## Desempenho
 
-- No máximo 6 superfícies com `backdrop-filter` visíveis ao mesmo tempo.
+- Blur real (20 px, saturate 160%) só nas superfícies grandes: abas, barra, painéis do painel e folhas.
+  Botões redondos e teclas do painel usam vidro tingido sem `backdrop-filter`.
+- O hero só troca de foto depois que o foco para por 220 ms.
 - Só `transform` e `opacity` animam. Blur nunca anima.
 - `prefers-reduced-transparency`: vidro vira fundo sólido `rgba(28,28,30,0.92)`.
 

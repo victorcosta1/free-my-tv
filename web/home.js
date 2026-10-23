@@ -83,9 +83,12 @@
     ['nfl', /nfl/, /^nfl/i, ['#013369', '#00163D']],
     ['globoplay', /globoplay/, /globoplay/i, ['#FF8A1F', '#FF2D5A']],
     ['jellyfin', /jellyfin/i, /jellyfin/i, ['#AA5CC3', '#00A4DC']],
-    ['spotify', /spotify/, /spotify/i, ['#1DB954', '#0F7A36']]
+    ['spotify', /spotify/, /spotify/i, ['#1DB954', '#0F7A36']],
+    ['crunchyroll', /crunchyroll/i, /crunchyroll/i, ['#FF8A2B', '#E8521C']]
   ];
   var MAX_SHELF = 8;
+  /** How many apps people pick for the shelf: one less in the glass look, where Live TV takes the first tile. */
+  function shelfApps() { return GLASS ? MAX_SHELF - 1 : MAX_SHELF; }
 
   function shelfKey(app) {
     for (var i = 0; i < SHELF.length; i++) if (SHELF[i][1].test(app.id) || SHELF[i][2].test(app.title)) return SHELF[i];
@@ -106,6 +109,13 @@
 
   /** An app's face: its own icon on its brand color (or its name, when the icon can't be read). */
   function face(app, box, wordSize) {
+    if (app.live) {
+      box.style.background = 'linear-gradient(#3A3A40, #1C1C20)';
+      setClass(box, 'live', true);
+      sym('live_tv', box, 40);
+      el('div', 'word', box, app.title);
+      return;
+    }
     var k = shelfKey(app);
     var top = k ? k[3][0] : app.color ? darken(app.color, 0.92) : '#2A2A2E';
     var bottom = k ? k[3][1] : app.color ? darken(app.color, 0.62) : '#161618';
@@ -137,8 +147,10 @@
       }
       if (!out.length) out = apps.slice(0, MAX_SHELF);
     }
+    // Glass look: Live TV is the shelf's first tile (spec/liquid-glass.md), one press from Home.
+    if (GLASS) out = [{id: '', title: tr('Live TV'), live: true}].concat(out.slice(0, MAX_SHELF - 1));
     shelf = out;
-    others = apps.filter(function (x) { return shelf.indexOf(x) < 0; });
+    others = apps.filter(function (x) { return out.indexOf(x) < 0; });
   }
 
   // MARK: - Focus
@@ -264,7 +276,7 @@
     updateFocus();
   }
 
-  var heroUrl = null, heroFront = 0;
+  var heroUrl = null, heroFront = 0, heroTimer = 0;
 
   /** Glass look: the focused pick (the first one, away from the picks) fills the screen, its name and details on it. */
   function hero() {
@@ -275,6 +287,13 @@
     var url = p ? Data.image(p.backdrop, 'w1280') : '';
     if (url === heroUrl) return;
     heroUrl = url;
+    // Wait until the focus rests: swapping the full-screen photo under the glass on every key press is what's slow.
+    clearTimeout(heroTimer);
+    heroTimer = setTimeout(function () { heroShow(url); }, 220);
+  }
+
+  function heroShow(url) {
+    if (heroUrl !== url) return;
     var shots = $('hero').querySelectorAll('.shot');
     if (!url) { setClass(shots[0], 'on', false); setClass(shots[1], 'on', false); return; }
     var img = new Image();
@@ -627,7 +646,7 @@
   // MARK: - Shelf editor: which apps, in what order
 
   function editList() {
-    var ids = shelf.map(function (a) { return a.id; });
+    var ids = shelf.filter(function (a) { return !a.live; }).map(function (a) { return a.id; });
     return {ids: ids, rows: apps.slice().sort(function (a, b) {
       var ia = ids.indexOf(a.id), ib = ids.indexOf(b.id);
       if (ia >= 0 || ib >= 0) return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
@@ -648,7 +667,7 @@
       el('span', 'value', row, at >= 0 ? '#' + (at + 1) : tr('shelf|Off'));
       hover(row, Z.EDIT, i);
     }
-    el('div', 'hint', box, trf('OK adds or removes (up to {n}). ← → change the order.', {n: MAX_SHELF}));
+    el('div', 'hint', box, trf('OK adds or removes (up to {n}). ← → change the order.', {n: shelfApps()}));
     updateFocus();
   }
 
@@ -667,8 +686,8 @@
     var ids = e.ids.slice(), at = ids.indexOf(app.id);
     if (dx === 0) {
       if (at >= 0) ids.splice(at, 1);
-      else if (ids.length < MAX_SHELF) ids.push(app.id);
-      else { toast(trf('The shelf holds up to {n} apps.', {n: MAX_SHELF})); return; }
+      else if (ids.length < shelfApps()) ids.push(app.id);
+      else { toast(trf('The shelf holds up to {n} apps.', {n: shelfApps()})); return; }
     } else {
       if (at < 0) return;
       var to = Math.max(0, Math.min(ids.length - 1, at + dx));
@@ -717,7 +736,8 @@
         if (app) launcher(app.id, app.title)();
         return;
       case Z.SHELF:
-        if (shelf[st.shelf]) launcher(shelf[st.shelf].id, shelf[st.shelf].title)();
+        if (shelf[st.shelf] && shelf[st.shelf].live) { var tv = liveTV(); if (tv) launcher(tv.id, tr('Live TV'))(); }
+        else if (shelf[st.shelf]) launcher(shelf[st.shelf].id, shelf[st.shelf].title)();
         return;
       case Z.DRAWER:
         if (drawerItems[st.drawer]) drawerItems[st.drawer].run();
